@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import KeystrokeEvent from './KeystrokeEvent'
 
-const startTime = Date.now();
+let prevTime: number | null = null;
 
 // Store all keystroke events
 const keystrokeEvents: KeystrokeEvent[] = [];
@@ -24,16 +24,19 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	const event_listener_disposable = vscode.workspace.onDidChangeTextDocument(event => {
+		const cur_time = Date.now();
 		for (const change of event.contentChanges) {
 			const keystroke: KeystrokeEvent = {
-				timestamp: Date.now() - startTime,
+				timestamp: cur_time,
+				delta_time: prevTime !== null ? cur_time - prevTime : 0,
 				text: change.text,
 				deletedChars: change.rangeLength,
 				fileName: event.document.fileName
 			};
 			
 			keystrokeEvents.push(keystroke);
-			console.log(`[${keystroke.timestamp}ms] "${keystroke.text}" (deleted: ${keystroke.deletedChars})`);
+			console.log(keystroke);
+			prevTime = cur_time;  // Update after each change, not just at end
 		}
     });
 
