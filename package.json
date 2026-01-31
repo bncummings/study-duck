@@ -1,3 +1,4 @@
+
 {
   "name": "study-duck",
   "displayName": "Study Duck",
@@ -9,9 +10,17 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": ["onStartupFinished"],
   "main": "./dist/extension.js",
-  "contributes": {
+    "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "type": "webview",
+          "id": "studyDuckView",
+          "name": "Study Duck"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "study-duck.helloWorld",
