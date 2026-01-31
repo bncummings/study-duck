@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
 import KeystrokeEvent from './KeystrokeEvent';
 import KeystrokeEventBuffer from './KeystrokeBuffer';
+import FlowState from './FlowState';
 
 let prevTime: number | null = null;
 
 // Store all keystroke events
+let current_state: FlowState = FlowState.FOCUSED; //Default
 const samples : KeystrokeEvent[][] = [];
-const keystrokeEvents = new KeystrokeEventBuffer(samples);
+const keystrokeEvents = new KeystrokeEventBuffer(samples); //TODO: pass in current state
 
 // Output channel for logging in Extension Host
 let outputChannel: vscode.OutputChannel;

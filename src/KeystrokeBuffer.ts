@@ -1,7 +1,5 @@
 import KeystrokeEvent from "./KeystrokeEvent";
-
-const CONTEXT_SWITCH_WINDOW = 5000; // 5 seconds 
-const MAX_WINDOW_SIZE =  60000; // minute in milliseconds
+import { CONTEXT_SWITCH_WINDOW, MAX_WINDOW_SIZE } from "./Constants";
 
 class KeystrokeBuffer {
     private buffer: KeystrokeEvent[] = [];
