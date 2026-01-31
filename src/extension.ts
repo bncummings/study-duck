@@ -13,13 +13,19 @@ export function activate(context: vscode.ExtensionContext) {
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with registerCommand
 	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('study-duck.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
+	const hello_world_disposable = vscode.commands.registerCommand('study-duck.helloWorld', () => {
 		vscode.window.showInformationMessage('Hello World from Study Duck!');
 	});
 
-	context.subscriptions.push(disposable);
+	const event_listener_disposable = vscode.workspace.onDidChangeTextDocument(event => {
+        console.log(`[${Date.now()}] Document changed: ${event.document.fileName}`);
+        console.log('Number of changes:', event.contentChanges.length);
+    });
+
+	context.subscriptions.push(
+		hello_world_disposable, 
+		event_listener_disposable
+	);
 }
 
 // This method is called when your extension is deactivated
