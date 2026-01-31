@@ -11,7 +11,6 @@ class KeystrokeBuffer {
         this.sampleList = sampleList;
     }
 
-
     /**
      * If the new keystroke is more than contextSwitchWindow ms after the last one, start a new sample
      * Otherwise, add to the current sample
