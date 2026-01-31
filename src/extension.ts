@@ -2,6 +2,19 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 
+const startTime = Date.now();
+
+// Keystroke event data structure
+interface KeystrokeEvent {
+	timestamp: number;
+	text: string;
+	deletedChars: number;
+	fileName: string;
+}
+
+// Store all keystroke events
+const keystrokeEvents: KeystrokeEvent[] = [];
+
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
@@ -18,8 +31,17 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	const event_listener_disposable = vscode.workspace.onDidChangeTextDocument(event => {
-        console.log(`[${Date.now()}] Document changed: ${event.document.fileName}`);
-        console.log('Number of changes:', event.contentChanges.length);
+		for (const change of event.contentChanges) {
+			const keystroke: KeystrokeEvent = {
+				timestamp: Date.now() - startTime,
+				text: change.text,
+				deletedChars: change.rangeLength,
+				fileName: event.document.fileName
+			};
+			
+			keystrokeEvents.push(keystroke);
+			console.log(`[${keystroke.timestamp}ms] "${keystroke.text}" (deleted: ${keystroke.deletedChars})`);
+		}
     });
 
 	context.subscriptions.push(
