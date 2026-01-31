@@ -16,6 +16,10 @@
       {
         "command": "study-duck.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "study-duck.collect-data",
+        "title": "Collect Data"
       }
     ]
   },

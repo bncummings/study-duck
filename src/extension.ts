@@ -1,24 +1,24 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
-import KeystrokeEvent from './KeystrokeEvent'
+import KeystrokeEvent from './KeystrokeEvent';
+import KeystrokeEventBuffer from './KeystrokeBuffer';
 
 let prevTime: number | null = null;
 
 // Store all keystroke events
-const keystrokeEvents: KeystrokeEvent[] = [];
+const samples : KeystrokeEvent[][] = [];
+const keystrokeEvents = new KeystrokeEventBuffer(samples);
+
+// Output channel for logging in Extension Host
+let outputChannel: vscode.OutputChannel;
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "study-duck" is now active!');
+	outputChannel = vscode.window.createOutputChannel('Study Duck');
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
 	const hello_world_disposable = vscode.commands.registerCommand('study-duck.helloWorld', () => {
 		vscode.window.showInformationMessage('Hello World from Study Duck!');
 	});
@@ -40,9 +40,19 @@ export function activate(context: vscode.ExtensionContext) {
 		}
     });
 
+	const print_samples_disposable = vscode.commands.registerCommand('study-duck.collect-data', () => {
+		const allSamples = keystrokeEvents.getAllSamples();
+		outputChannel.clear();
+		outputChannel.appendLine('=== Keystroke Samples ===');
+		outputChannel.appendLine(`Total sample groups: ${allSamples.length}`);
+		outputChannel.appendLine(JSON.stringify(allSamples, null, 2));
+		outputChannel.show();  // Opens the Output panel
+	});
+
 	context.subscriptions.push(
 		hello_world_disposable, 
-		event_listener_disposable
+		event_listener_disposable,
+		print_samples_disposable
 	);
 }
 
