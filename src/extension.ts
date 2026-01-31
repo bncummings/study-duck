@@ -28,7 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
 		for (const change of event.contentChanges) {
 			const keystroke: KeystrokeEvent = {
 				timestamp: cur_time,
-				delta_time: prevTime !== null ? cur_time - prevTime : 0,
+				delta_time: prevTime ? cur_time - prevTime : 0,
 				text: change.text,
 				deletedChars: change.rangeLength,
 				fileName: event.document.fileName
