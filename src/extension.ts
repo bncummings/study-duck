@@ -1,16 +1,9 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import KeystrokeEvent from './KeystrokeEvent'
 
 const startTime = Date.now();
-
-// Keystroke event data structure
-interface KeystrokeEvent {
-	timestamp: number;
-	text: string;
-	deletedChars: number;
-	fileName: string;
-}
 
 // Store all keystroke events
 const keystrokeEvents: KeystrokeEvent[] = [];
