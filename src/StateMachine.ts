@@ -54,10 +54,10 @@ function scoreIdle(f: Features): number {
 function scoreFatigued(f: Features): number {
     const eventsPerMin = f.events / Math.max(0.1, f.durationMs / 60000);
     const slowScore = clamp01((NORMAL_RATE - eventsPerMin) / (NORMAL_RATE - SLOW_RATE));
-    const lowBurst = clamp01(1 - f.burstFraction / 0.5);         // burstFraction < 50% → tired
-    const pauseUp = clamp01(f.pauseFraction / 0.25);             // 25% pause → fatigued
-    const struggleScore = clamp01(f.churn / 3.0);                // high churn from mistakes
-    return clamp01(0.40 * slowScore + 0.25 * lowBurst + 0.20 * pauseUp + 0.15 * struggleScore);
+    const lowBurst = clamp01(1 - f.burstFraction / 0.35);        // burstFraction < 35% → tired
+    const pauseUp = clamp01(f.pauseFraction / 0.35);             // 35% pause → fatigued
+    const struggleScore = clamp01(f.churn / 4.0);                // high churn from mistakes
+    return clamp01(0.35 * slowScore + 0.25 * lowBurst + 0.20 * pauseUp + 0.20 * struggleScore);
 }
 
 // Hysteresis thresholds (enter is higher than exit to prevent flickering)
@@ -65,7 +65,7 @@ const ENTER_THRESHOLD = {
     [FlowState.FLOW]: 0.55,
     [FlowState.THRASHING]: 0.50,
     [FlowState.IDLE]: 0.45,
-    [FlowState.FATIGUED]: 0.45,
+    [FlowState.FATIGUED]: 0.60,
 };
 
 const EXIT_THRESHOLD = {
