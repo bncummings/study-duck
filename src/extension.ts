@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { exec } from 'child_process';
+import * as path from 'path';
 import KeystrokeEvent from './KeystrokeEvent';
 import KeystrokeEventBuffer from './KeystrokeBuffer';
 import { NextStateResult } from './StateMachine';
@@ -167,6 +169,18 @@ export function activate(context: vscode.ExtensionContext) {
 					} else if (state.state === FlowState.FATIGUED) {
 						flowProvider.setFlowState('Fatigued');
 						provider.setFlowState('Fatigued');
+						
+						// Run the fatigue script
+						const scriptPath = path.join(context.extensionPath, 'src', 'scripts', 'test.sh');
+						exec(`"${scriptPath}"`, (error, stdout, stderr) => {
+							if (error) {
+								console.error(`Fatigue script error: ${error.message}`);
+								return;
+							}
+							if (stdout) { console.log(`Fatigue script output: ${stdout}`); }
+							if (stderr) { console.error(`Fatigue script stderr: ${stderr}`); }
+						});
+						
             if (!fatiguedReminderTimeout) {
               fatiguedReminderTimeout = setTimeout(() => {
                 provider.sendMessage({
