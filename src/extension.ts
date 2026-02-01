@@ -9,17 +9,22 @@ let prevTime: number | null = null;
 
 // Store all keystroke events
 let current_state: NextStateResult = createInitialState(); //Default
+let lastDisplayedState: FlowState | null = null; // Track last displayed state
+let flowParticleInterval: NodeJS.Timeout | null = null; // Interval for flow particles
+let fatiguedReminderTimeout: NodeJS.Timeout | null = null; // Reminder when fatigued persists
 const samples : KeystrokeEvent[][] = [];
 const keystrokeEvents = new KeystrokeEventBuffer(samples, current_state);
 
 // Output channel for logging in Extension Host
 let outputChannel: vscode.OutputChannel;
+let provider: StudyDuckViewProvider;
+let flowProvider: FlowViewProvider;
 
 export function activate(context: vscode.ExtensionContext) {
 	outputChannel = vscode.window.createOutputChannel('Study Duck');
 
-	const provider = new StudyDuckViewProvider(context.extensionUri);
-	const flowProvider = new FlowViewProvider(context.extensionUri);
+	provider = new StudyDuckViewProvider(context.extensionUri);
+	flowProvider = new FlowViewProvider(context.extensionUri);
 
 	// Pomodoro timer state
 	let pomodoroRunning = false;
@@ -101,16 +106,63 @@ export function activate(context: vscode.ExtensionContext) {
 			//console.log('Keystroke added:', keystroke);
 			console.log(`[${state.state.toString()}] scores:`, state.scores);
 			prevTime = cur_time;
+
 			if (state.state === FlowState.FLOW) {
-				flowProvider.setFlowState('Flow');
-			} else if (state.state === FlowState.FOCUSED) {
-				flowProvider.setFlowState('Focused');
-			} else if (state.state === FlowState.HESITATING) {
-				flowProvider.setFlowState('Hesitating');
-			} else if (state.state === FlowState.THRASHING) {
-				flowProvider.setFlowState('Thrashing');
-			} else if (state.state === FlowState.FATIGUED) {
-				flowProvider.setFlowState('Fatigued');
+				provider.sendMessage({ command: 'flowParticles' });
+			}
+			
+			// Only update views if state actually changed
+			if (state.state !== lastDisplayedState) {
+				lastDisplayedState = state.state;
+				if (state.state === FlowState.FLOW) {
+					flowProvider.setFlowState('Flow');
+					provider.setFlowState('Flow');
+				} else {
+					// Stop particles when leaving flow state
+					if (flowParticleInterval) {
+						clearInterval(flowParticleInterval);
+						flowParticleInterval = null;
+					}
+					
+          // Stop fatigued reminder when leaving fatigued state
+          if (state.state !== FlowState.FATIGUED && fatiguedReminderTimeout) {
+            clearTimeout(fatiguedReminderTimeout);
+            fatiguedReminderTimeout = null;
+          }
+					
+					if (state.state === FlowState.FOCUSED) {
+						flowProvider.setFlowState('Focused');
+						provider.setFlowState('Focused');
+					} else if (state.state === FlowState.HESITATING) {
+						flowProvider.setFlowState('Hesitating');
+						provider.setFlowState('Hesitating');
+					} else if (state.state === FlowState.THRASHING) {
+						flowProvider.setFlowState('Thrashing');
+						provider.setFlowState('Thrashing');
+						// Show confused state and provide helpful message
+						provider.sendMessage({ command: 'confused' });
+						setTimeout(() => {
+							provider.sendMessage({ 
+								command: 'helpfulMessage',
+								message: '💡 Try breaking it down into smaller steps! You\'ve got this 💪'
+							});
+							provider.sendMessage({ command: 'talk' });
+						}, 2000);
+					} else if (state.state === FlowState.FATIGUED) {
+						flowProvider.setFlowState('Fatigued');
+						provider.setFlowState('Fatigued');
+            if (!fatiguedReminderTimeout) {
+              fatiguedReminderTimeout = setTimeout(() => {
+                provider.sendMessage({
+                  command: 'helpfulMessage',
+                  message: '😴 You seem tired. Consider taking a short break or stretching.'
+                });
+                provider.sendMessage({ command: 'talk' });
+                fatiguedReminderTimeout = null;
+              }, 10000);
+            }
+					}
+				}
 			}
 		}
     });
@@ -151,8 +203,22 @@ class StudyDuckViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'studyDuckView';
   public _view?: vscode.WebviewView;
   private _timerText = '';
+	private _currentStateIndex = 0;
+	private readonly _states = ['Focused', 'Flow', 'Hesitating', 'Thrashing', 'Fatigued'];
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
+
+	setFlowState(stateName: string) {
+    const stateIndex = this._states.indexOf(stateName);
+    if (stateIndex !== -1) {
+      this._currentStateIndex = stateIndex;
+      this._view?.webview.postMessage({ 
+        command: 'setState', 
+        index: stateIndex,
+        label: stateName
+      });
+    }
+  }
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -219,7 +285,6 @@ private _getHtml(webview: vscode.Webview) {
 	const default_closedUri = webview.asWebviewUri(
     vscode.Uri.joinPath(this._extensionUri, 'media', 'default_closed.png')
   );
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -314,14 +379,27 @@ private _getHtml(webview: vscode.Webview) {
       const messageDiv = document.getElementById('message');
       if (!duck || !messageDiv) return;
 
-      if (msg.command === 'pirate') {
+      if (msg.command === 'setState') {
+        // Change duck image based on flow state
+        const stateImages = {
+          'Focused': '${default_closedUri}',
+          'Flow': '${loveUri}',
+          'Hesitating': '${worriedUri}',
+          'Thrashing': '${confusedUri}',
+          'Fatigued': '${destressedUri}'
+        };
+        duck.src = stateImages[msg.label] || '${duckUri}';
+        duck.classList.remove('tilting');
+      } else if (msg.command === 'pirate') {
         duck.src = '${pirateUri}';
         messageDiv.textContent = 'Arrr! 🏴‍☠️';
         duck.classList.remove('tilting');
       } else if (msg.command === 'confused') {
         duck.src = '${confusedUri}';
-        messageDiv.textContent = '🤔 Confused...';
         duck.classList.add('tilting');
+      } else if (msg.command === 'helpfulMessage') {
+        messageDiv.textContent = msg.message;
+        duck.classList.remove('tilting');
       } else if (msg.command === 'talk') {
         duck.classList.remove('tilting');
 									
@@ -337,6 +415,35 @@ private _getHtml(webview: vscode.Webview) {
 						mouthFlaps++;
 					}
 				}, 150);
+      } else if (msg.command === 'flowParticles') {
+        // Create multiple particles one by one at random positions
+        const flowEmojis = ['✨', '⭐', '🌟', '💫', '🎉', '💛'];
+        const particleCount = 1;
+        const duckRect = duck.getBoundingClientRect();
+        const duckCenterX = duckRect.left + duckRect.width / 2;
+        const duckCenterY = duckRect.top + duckRect.height / 2;
+        
+        for (let i = 0; i < particleCount; i++) {
+          setTimeout(() => {
+            const particle = document.createElement('div');
+            particle.classList.add('particle');
+            particle.textContent = flowEmojis[Math.floor(Math.random() * flowEmojis.length)];
+            
+            // Random position around the duck
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 30 + Math.random() * 40;
+            const randomX = duckCenterX + Math.cos(angle) * distance;
+            const randomY = duckCenterY + Math.sin(angle) * distance;
+            
+            particle.style.left = randomX + 'px';
+            particle.style.top = randomY + 'px';
+            particle.style.setProperty('--tx', (Math.random() - 0.5) * 60 + 'px');
+            
+            document.getElementById('particles').appendChild(particle);
+            
+            setTimeout(() => particle.remove(), 1500);
+          }, i * 300); // Stagger particles by 80ms each
+        }
       }
     });
 
@@ -367,31 +474,10 @@ private _getHtml(webview: vscode.Webview) {
       }
     });
 
-    // Cycle messages every 5 seconds
-    setInterval(() => {
-      messageIndex = (messageIndex + 1) % messages.length;
-      document.getElementById('message').textContent = messages[messageIndex];
-			// Trigger talking animation
-			if (messageIndex === messages.length - 1) { // When we show "I love you"
-				// Mouth animation while talking
-				let mouthFlaps = 0;
-				const maxFlaps = 4;
-				const flapInterval = setInterval(() => {
-					if (mouthFlaps >= maxFlaps) {
-						clearInterval(flapInterval);
-						duck.src = '${duckUri}';
-					} else {
-						duck.src = mouthFlaps % 2 === 0 ? '${default_closedUri}' : '${duckUri}';
-						mouthFlaps++;
-					}
-				}, 200);
-			}
-    }, 10000);
-
     // Blink occasionally (every 3-7 seconds)
     setInterval(() => {
       const duck = document.getElementById('duck');
-      const originalSrc = "${duckUri}";
+      const originalSrc = duck.src;
       duck.src = '${blinkingUri}';
       setTimeout(() => {
         duck.src = originalSrc;
