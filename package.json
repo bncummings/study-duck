@@ -14,13 +14,18 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
-    "contributes": {
+  "contributes": {
     "views": {
       "explorer": [
         {
           "type": "webview",
           "id": "studyDuckView",
           "name": "Study Duck"
+        },
+        {
+          "type": "webview",
+          "id": "flowView",
+          "name": "Flow"
         }
       ]
     },
@@ -32,8 +37,33 @@
       {
         "command": "study-duck.collect-data",
         "title": "Collect Data"
+      },
+      {
+        "command": "study-duck.togglePomodoro",
+        "title": "+"
+      },
+      {
+        "command": "study-duck.pirate",
+        "title": "pirate"
+      },
+      {
+        "command": "study-duck.confused",
+        "title": "Confused Duck"
+      },
+      {
+        "command": "study-duck.talk",
+        "title": "Talk"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "study-duck.togglePomodoro",
+          "when": "view == studyDuckView",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

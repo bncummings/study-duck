@@ -3,6 +3,7 @@ import KeystrokeEvent from './KeystrokeEvent';
 import KeystrokeEventBuffer from './KeystrokeBuffer';
 import { NextStateResult } from './StateMachine';
 import { createInitialState } from './StateMachine';
+import FlowState from './FlowState';
 
 let prevTime: number | null = null;
 
@@ -16,6 +17,68 @@ let outputChannel: vscode.OutputChannel;
 
 export function activate(context: vscode.ExtensionContext) {
 	outputChannel = vscode.window.createOutputChannel('Study Duck');
+
+	const provider = new StudyDuckViewProvider(context.extensionUri);
+	const flowProvider = new FlowViewProvider(context.extensionUri);
+
+	// Pomodoro timer state
+	let pomodoroRunning = false;
+	const workTime = 25 * 60; // 25 minutes
+	const breakTime = 5 * 60; // 5 minutes
+	let timeLeft = workTime;
+	let isWorkSession = true;
+
+  const updateTimerDisplay = () => {
+		const mins = Math.floor(timeLeft / 60);
+		const secs = timeLeft % 60;
+		const label = isWorkSession ? '🍅' : '☕';
+		const timerText = `${label} ${mins}:${secs.toString().padStart(2, '0')}`;
+    provider.setTitle(timerText);
+	};
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand('study-duck.togglePomodoro', () => {
+			pomodoroRunning = !pomodoroRunning;
+			if (pomodoroRunning) {
+				vscode.window.showInformationMessage(`${isWorkSession ? '🍅 Work' : '☕ Break'} session started!`);
+			}
+		})
+	);
+
+	// Timer tick every second
+	setInterval(() => {
+		if (pomodoroRunning && timeLeft > 0) {
+			timeLeft--;
+			updateTimerDisplay();
+
+			if (timeLeft === 0) {
+				if (isWorkSession) {
+					vscode.window.showInformationMessage('🍅 Work session done! Time for a break ☕');
+					isWorkSession = false;
+					timeLeft = breakTime;
+				} else {
+					vscode.window.showInformationMessage('☕ Break over! Ready to work? 🍅');
+					isWorkSession = true;
+					timeLeft = workTime;
+				}
+				pomodoroRunning = false;
+				updateTimerDisplay();
+			}
+		}
+	}, 1000);
+
+	context.subscriptions.push(
+		vscode.window.registerWebviewViewProvider(
+			StudyDuckViewProvider.viewType,
+			provider
+		),
+		vscode.window.registerWebviewViewProvider(
+			FlowViewProvider.viewType,
+			flowProvider
+		)
+	);
+
+	updateTimerDisplay();
 
 	const hello_world_disposable = vscode.commands.registerCommand('study-duck.helloWorld', () => {
 		vscode.window.showInformationMessage('Hello World from Study Duck!');
@@ -38,6 +101,17 @@ export function activate(context: vscode.ExtensionContext) {
 			//console.log('Keystroke added:', keystroke);
 			console.log(`[${state.state.toString()}] scores:`, state.scores);
 			prevTime = cur_time;
+			if (state.state === FlowState.FLOW) {
+				flowProvider.setFlowState('Flow');
+			} else if (state.state === FlowState.FOCUSED) {
+				flowProvider.setFlowState('Focused');
+			} else if (state.state === FlowState.HESITATING) {
+				flowProvider.setFlowState('Hesitating');
+			} else if (state.state === FlowState.THRASHING) {
+				flowProvider.setFlowState('Thrashing');
+			} else if (state.state === FlowState.FATIGUED) {
+				flowProvider.setFlowState('Fatigued');
+			}
 		}
     });
 
@@ -49,16 +123,25 @@ export function activate(context: vscode.ExtensionContext) {
 		outputChannel.appendLine(JSON.stringify(allSamples, null, 2));
 		outputChannel.show();  // Opens the Output panel
 	});
-  const provider = new StudyDuckViewProvider(context.extensionUri);
+
+  const pirate_disposable = vscode.commands.registerCommand('study-duck.pirate', () => {
+    provider.sendMessage({ command: 'pirate' });
+  });
+
+  const confused_disposable = vscode.commands.registerCommand('study-duck.confused', () => {
+    provider.sendMessage({ command: 'confused' });
+  });
+
+  const talk_disposable = vscode.commands.registerCommand('study-duck.talk', () => {
+    provider.sendMessage({ command: 'talk' });
+  });
 
 	context.subscriptions.push(
 		hello_world_disposable, 
 		event_listener_disposable,
-		print_samples_disposable,
-		    vscode.window.registerWebviewViewProvider(
-      StudyDuckViewProvider.viewType,
-      provider
-    )
+    pirate_disposable,
+    confused_disposable,
+    talk_disposable,
 	);
 }
 
@@ -66,7 +149,8 @@ export function deactivate() {}
 
 class StudyDuckViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'studyDuckView';
-  private _view?: vscode.WebviewView;
+  public _view?: vscode.WebviewView;
+  private _timerText = '';
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
 
@@ -76,6 +160,7 @@ class StudyDuckViewProvider implements vscode.WebviewViewProvider {
     _token: vscode.CancellationToken
   ) {
     this._view = webviewView;
+    this.setTitle(this._timerText);
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [this._extensionUri]
@@ -93,9 +178,46 @@ class StudyDuckViewProvider implements vscode.WebviewViewProvider {
     this._view?.webview.postMessage(message);
   }
 
+  setTitle(timerText: string) {
+    this._timerText = timerText;
+    if (this._view) {
+      this._view.title = `Study Duck ${timerText}`;
+    }
+}
+
 private _getHtml(webview: vscode.Webview) {
   const duckUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(this._extensionUri, 'media', 'yellow-duck.png')
+    vscode.Uri.joinPath(this._extensionUri, 'media', 'default.png')
+  );
+  const blinkingUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(this._extensionUri, 'media', 'blink_open.png')
+  );
+  const pirateUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(this._extensionUri, 'media', 'pirate.png')
+  );
+  const confusedUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(this._extensionUri, 'media', 'confused.png')
+  );
+	const cyclopsUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(this._extensionUri, 'media', 'cyclops.png')
+  );
+	const destressedUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(this._extensionUri, 'media', 'destressed.png')
+  );
+	const sparkleUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(this._extensionUri, 'media', 'sparkle.png')
+  );
+	const loveUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(this._extensionUri, 'media', 'love.png')
+  );
+	const worriedUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(this._extensionUri, 'media', 'worried.png')
+  );
+	const blink_closedUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(this._extensionUri, 'media', 'blink_closed.png')
+  );
+	const default_closedUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(this._extensionUri, 'media', 'default_closed.png')
   );
 
   return `<!DOCTYPE html>
@@ -111,12 +233,24 @@ private _getHtml(webview: vscode.Webview) {
     align-items: center;
     height: 100%;
     margin: 0;
+    background: #ffffff;
     font-family: sans-serif;
   }
   #duck {
+    max-width: 150px;
+    max-height: 150px;
     width: auto;
     height: auto;
     margin-top: 8px;
+    transition: transform 0.1s ease-in-out;
+  }
+  #duck.tilting {
+    animation: tilt 1s ease-in-out infinite;
+  }
+  @keyframes tilt {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(15deg); }
+    75% { transform: rotate(-15deg); }
   }
   #message {
     margin-top: 10px;
@@ -128,14 +262,42 @@ private _getHtml(webview: vscode.Webview) {
     width: 90%;
     word-wrap: break-word;
   }
+  #particles {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 9999;
+  }
+  .particle {
+    position: absolute;
+    font-size: 24px;
+    font-weight: bold;
+    pointer-events: none;
+    animation: float-up 1.5s ease-out forwards;
+  }
+  @keyframes float-up {
+    0% {
+      opacity: 1;
+      transform: translateY(0) translateX(0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-100px) translateX(var(--tx));
+    }
+  }
 </style>
 </head>
 <body>
+  <div id="particles"></div>
   <img id="duck" src="${duckUri}" />
   <div id="message">Hello! I'm your duck 🦆</div>
 
   <script>
     const vscode = acquireVsCodeApi();
+    const duck = document.getElementById('duck');
     const messages = [
       "Hello! I'm your duck 🦆",
       "Remember to take breaks! 💪",
@@ -147,13 +309,204 @@ private _getHtml(webview: vscode.Webview) {
     ];
     let messageIndex = 0;
 
+    window.addEventListener('message', event => {
+      const msg = event.data;
+      const messageDiv = document.getElementById('message');
+      if (!duck || !messageDiv) return;
+
+      if (msg.command === 'pirate') {
+        duck.src = '${pirateUri}';
+        messageDiv.textContent = 'Arrr! 🏴‍☠️';
+        duck.classList.remove('tilting');
+      } else if (msg.command === 'confused') {
+        duck.src = '${confusedUri}';
+        messageDiv.textContent = '🤔 Confused...';
+        duck.classList.add('tilting');
+      } else if (msg.command === 'talk') {
+        duck.classList.remove('tilting');
+									
+				// Mouth animation while talking
+				let mouthFlaps = 0;
+				const maxFlaps = 6;
+				const flapInterval = setInterval(() => {
+					if (mouthFlaps >= maxFlaps) {
+						clearInterval(flapInterval);
+						duck.src = '${duckUri}';
+					} else {
+						duck.src = mouthFlaps % 2 === 0 ? '${default_closedUri}' : '${duckUri}';
+						mouthFlaps++;
+					}
+				}, 150);
+      }
+    });
+
+    // Click to quack
+    duck.addEventListener('click', (e) => {
+      vscode.postMessage({ command: 'quack' });
+      document.getElementById('message').textContent = 'Quack! 🦆';
+
+      duck.style.transform = 'scale(0.92)';
+      setTimeout(() => {
+        duck.style.transform = 'scale(1)';
+      }, 60);
+      
+      // Create particles from mouse position
+      const particleEmojis = ['🦆', '💛', '✨', '⭐', '🎉'];
+      for (let i = 0; i < 1; i++) {
+        const particle = document.createElement('div');
+        particle.classList.add('particle');
+        particle.textContent = particleEmojis[Math.floor(Math.random() * particleEmojis.length)];
+        
+        particle.style.left = e.clientX + 'px';
+        particle.style.top = e.clientY + 'px';
+        particle.style.setProperty('--tx', (Math.random() - 0.5) * 100 + 'px');
+        
+        document.getElementById('particles').appendChild(particle);
+        
+        setTimeout(() => particle.remove(), 1500);
+      }
+    });
+
     // Cycle messages every 5 seconds
     setInterval(() => {
       messageIndex = (messageIndex + 1) % messages.length;
       document.getElementById('message').textContent = messages[messageIndex];
-    }, 5000);
+			// Trigger talking animation
+			if (messageIndex === messages.length - 1) { // When we show "I love you"
+				// Mouth animation while talking
+				let mouthFlaps = 0;
+				const maxFlaps = 4;
+				const flapInterval = setInterval(() => {
+					if (mouthFlaps >= maxFlaps) {
+						clearInterval(flapInterval);
+						duck.src = '${duckUri}';
+					} else {
+						duck.src = mouthFlaps % 2 === 0 ? '${default_closedUri}' : '${duckUri}';
+						mouthFlaps++;
+					}
+				}, 200);
+			}
+    }, 10000);
+
+    // Blink occasionally (every 3-7 seconds)
+    setInterval(() => {
+      const duck = document.getElementById('duck');
+      const originalSrc = "${duckUri}";
+      duck.src = '${blinkingUri}';
+      setTimeout(() => {
+        duck.src = originalSrc;
+      }, 150);
+    }, Math.random() * 4000 + 3000);
   </script>
 </body>
 </html>`;
 }
 }
+
+class FlowViewProvider implements vscode.WebviewViewProvider {
+  public static readonly viewType = 'flowView';
+  private _view?: vscode.WebviewView;
+  private _currentStateIndex = 0;
+  private readonly _states = ['Focused', 'Flow', 'Hesitating', 'Thrashing', 'Fatigued'];
+
+  constructor(private readonly _extensionUri: vscode.Uri) {}
+
+	setFlowState(stateName: string) {
+    const stateIndex = this._states.indexOf(stateName);
+    if (stateIndex !== -1) {
+      this._currentStateIndex = stateIndex;
+      this._view?.webview.postMessage({ 
+        command: 'setState', 
+        index: stateIndex,
+        label: stateName
+      });
+    }
+  }
+
+  resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    _context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken
+  ) {
+    this._view = webviewView;
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [this._extensionUri]
+    };
+
+    webviewView.webview.onDidReceiveMessage(msg => {
+      // Handle any messages from webview if needed
+    });
+
+    const flowUri = webviewView.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'media', 'fan_flow.png')
+    );
+		const focusedUri = webviewView.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'media', 'fan_focused.png')
+    );
+		const hesitatingUri = webviewView.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'media', 'fan_hesitating.png')
+    );
+		const frustratedUri = webviewView.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'media', 'fan_frustrated.png')
+    );
+		const fatiguedUri = webviewView.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'media', 'fan_fatigued.png')
+    );
+
+    webviewView.webview.html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      margin: 0;
+      padding: 20px;
+      background: #ffffff;
+      font-family: sans-serif;
+    }
+    img {
+      max-width: 100%;
+      width: 150px;
+      height: auto;
+      margin-bottom: 10px;
+    }
+    #stateLabel {
+      font-size: 16px;
+      font-weight: bold;
+      text-align: center;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <img src="${focusedUri}" alt="Flow" id="fan" />
+  <div id="stateLabel">Focused</div>
+
+  <script>
+    const states = ['Focused', 'Flow', 'Hesitating', 'Thrashing', 'Fatigued'];
+    const images = ['${focusedUri}', '${flowUri}', '${hesitatingUri}', '${frustratedUri}', '${fatiguedUri}'];
+    const imageElement = document.getElementById('fan');
+    const stateLabel = document.getElementById('stateLabel');
+    
+    // Listen for external state changes
+    window.addEventListener('message', event => {
+      const msg = event.data;
+      if (msg.command === 'setState') {
+        currentIndex = msg.index;
+        stateLabel.textContent = msg.label;
+        imageElement.src = images[currentIndex];
+      }
+    });
+  </script>
+			</body>
+			</html>`;
+				}
+			}
+
