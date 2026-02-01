@@ -519,10 +519,10 @@ class FlowViewProvider implements vscode.WebviewViewProvider {
     // Angles: -90° (left) to +90° (right) across the semi-circle
     // 5 segments: each is 36° wide, centered at -72°, -36°, 0°, 36°, 72°
     const stateAngles = {
-      'Focused': 70,
-      'Flow': 45,
+      'Focused': 62,
+      'Flow': 38,
       'Hesitating': 90,
-      'Thrashing': 160,
+      'Thrashing': 152,
       'Fatigued': 120
     };
     
