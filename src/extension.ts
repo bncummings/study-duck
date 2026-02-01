@@ -484,8 +484,7 @@ class FlowViewProvider implements vscode.WebviewViewProvider {
       background: #000;
       border-radius: 2px;
       transform-origin: bottom center;
-      transform: rotate(-90deg);
-      transition: transform 0.5s ease-out;
+      transform: rotate(0deg);
     }
     .pointer::after {
       content: '';
@@ -529,10 +528,36 @@ class FlowViewProvider implements vscode.WebviewViewProvider {
     const stateLabel = document.getElementById('stateLabel');
     const pointer = document.getElementById('pointer');
     
+    let targetAngle = 0;
+    let currentAngle = 0;
+    let isTransitioning = false;
+    
     function setPointer(stateName) {
       const angle = stateAngles[stateName] || 0;
-      pointer.style.transform = 'rotate(' + (angle - 90) + 'deg)';
+      targetAngle = angle - 90;
+      isTransitioning = true;
     }
+    
+    // Animation loop: smooth transition + oscillation
+    function animate() {
+      if (isTransitioning) {
+        // Smooth transition towards target
+        const diff = targetAngle - currentAngle;
+        if (Math.abs(diff) < 0.5) {
+          currentAngle = targetAngle;
+          isTransitioning = false;
+        } else {
+          currentAngle += diff * 0.08;
+        }
+        pointer.style.transform = 'rotate(' + currentAngle + 'deg)';
+      } else {
+        // Oscillate around target angle
+        const oscillation = Math.sin(Date.now() * 0.03) * 1.5;
+        pointer.style.transform = 'rotate(' + (targetAngle + oscillation) + 'deg)';
+      }
+      requestAnimationFrame(animate);
+    }
+    animate();
     
     // Listen for external state changes
     window.addEventListener('message', event => {
