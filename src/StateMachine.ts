@@ -37,10 +37,10 @@ function scoreThrashing(f: Features): number {
 }
 
 /**
- * HESITATING: Frequent pauses, stop-start pattern
- * Not about speed, but about interruption pattern
+ * IDLE: Frequent pauses, stop-start pattern, or no activity
+ * Default state when there's no activity
  */
-function scoreHesitating(f: Features): number {
+function scoreIdle(f: Features): number {
     const breaksScore = clamp01(f.breaksPerMin / 2.0);           // 2 breaks/min → strong
     const medianScore = clamp01(f.medianBreakMs / 8000);         // 8s median → strong
     const pauseScore = clamp01(f.pauseFraction / 0.20);          // 20% pause time → strong
@@ -54,24 +54,24 @@ function scoreHesitating(f: Features): number {
 function scoreFatigued(f: Features): number {
     const eventsPerMin = f.events / Math.max(0.1, f.durationMs / 60000);
     const slowScore = clamp01((NORMAL_RATE - eventsPerMin) / (NORMAL_RATE - SLOW_RATE));
-    const lowBurst = clamp01(1 - f.burstFraction / 0.5);         // burstFraction < 50% → tired
-    const pauseUp = clamp01(f.pauseFraction / 0.25);             // 25% pause → fatigued
-    const struggleScore = clamp01(f.churn / 3.0);                // high churn from mistakes
-    return clamp01(0.40 * slowScore + 0.25 * lowBurst + 0.20 * pauseUp + 0.15 * struggleScore);
+    const lowBurst = clamp01(1 - f.burstFraction / 0.35);        // burstFraction < 35% → tired
+    const pauseUp = clamp01(f.pauseFraction / 0.35);             // 35% pause → fatigued
+    const struggleScore = clamp01(f.churn / 4.0);                // high churn from mistakes
+    return clamp01(0.35 * slowScore + 0.25 * lowBurst + 0.20 * pauseUp + 0.20 * struggleScore);
 }
 
 // Hysteresis thresholds (enter is higher than exit to prevent flickering)
 const ENTER_THRESHOLD = {
     [FlowState.FLOW]: 0.55,
     [FlowState.THRASHING]: 0.50,
-    [FlowState.HESITATING]: 0.45,
-    [FlowState.FATIGUED]: 0.45,
+    [FlowState.IDLE]: 0.45,
+    [FlowState.FATIGUED]: 0.60,
 };
 
 const EXIT_THRESHOLD = {
     [FlowState.FLOW]: 0.35,
     [FlowState.THRASHING]: 0.35,
-    [FlowState.HESITATING]: 0.30,
+    [FlowState.IDLE]: 0.30,
     [FlowState.FATIGUED]: 0.30,
 };
 
@@ -79,7 +79,7 @@ const EXIT_THRESHOLD = {
 const STATE_PRIORITY: FlowState[] = [
     FlowState.FATIGUED,
     FlowState.THRASHING,
-    FlowState.HESITATING,
+    FlowState.IDLE,
     FlowState.FLOW,
     FlowState.FOCUSED,
 ];
@@ -87,7 +87,7 @@ const STATE_PRIORITY: FlowState[] = [
 export type StateScores = {
     [FlowState.FLOW]: number;
     [FlowState.THRASHING]: number;
-    [FlowState.HESITATING]: number;
+    [FlowState.IDLE]: number;
     [FlowState.FATIGUED]: number;
     [FlowState.FOCUSED]: number;
 };
@@ -103,13 +103,13 @@ export type NextStateResult = {
  */
 export function createInitialState(): NextStateResult {
     return {
-        state: FlowState.FOCUSED,
+        state: FlowState.IDLE,
         scores: {
             [FlowState.FLOW]: 0,
             [FlowState.THRASHING]: 0,
-            [FlowState.HESITATING]: 0,
+            [FlowState.IDLE]: 1,
             [FlowState.FATIGUED]: 0,
-            [FlowState.FOCUSED]: 1,
+            [FlowState.FOCUSED]: 0,
         },
         features: {
             durationMs: 0,
@@ -142,14 +142,14 @@ export function next_state(current: NextStateResult, events: KeystrokeEvent[]): 
     // Calculate scores for each state
     const flow = scoreFlow(features);
     const thrashing = scoreThrashing(features);
-    const hesitating = scoreHesitating(features);
+    const idle = scoreIdle(features);
     const fatigued = scoreFatigued(features);
-    const focused = clamp01(1 - Math.max(flow, thrashing, hesitating, fatigued));
+    const focused = clamp01(1 - Math.max(flow, thrashing, idle, fatigued));
 
     const scores: StateScores = {
         [FlowState.FLOW]: flow,
         [FlowState.THRASHING]: thrashing,
-        [FlowState.HESITATING]: hesitating,
+        [FlowState.IDLE]: idle,
         [FlowState.FATIGUED]: fatigued,
         [FlowState.FOCUSED]: focused,
     };

@@ -5,7 +5,7 @@
 enum FlowState {
     FOCUSED = "FOCUSED",
     FLOW = "FLOW",
-    HESITATING = "HESITATING",
+    IDLE = "IDLE",
     THRASHING = "THRASHING",
     FATIGUED = "FATIGUED",
 }
