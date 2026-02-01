@@ -1,12 +1,15 @@
 import * as vscode from 'vscode';
 import KeystrokeEvent from './KeystrokeEvent';
 import KeystrokeEventBuffer from './KeystrokeBuffer';
+import { NextStateResult } from './StateMachine';
+import { createInitialState } from './StateMachine';
 
 let prevTime: number | null = null;
 
 // Store all keystroke events
+let current_state: NextStateResult = createInitialState(); //Default
 const samples : KeystrokeEvent[][] = [];
-const keystrokeEvents = new KeystrokeEventBuffer(samples);
+const keystrokeEvents = new KeystrokeEventBuffer(samples, current_state);
 
 // Output channel for logging in Extension Host
 let outputChannel: vscode.OutputChannel;
@@ -30,8 +33,11 @@ export function activate(context: vscode.ExtensionContext) {
 			};
 			
 			keystrokeEvents.push(keystroke);
-			console.log(keystroke);
-			prevTime = cur_time;  // Update after each change, not just at end
+
+			const state = keystrokeEvents.getState();
+			//console.log('Keystroke added:', keystroke);
+			console.log(`[${state.state.toString()}] scores:`, state.scores);
+			prevTime = cur_time;
 		}
     });
 
