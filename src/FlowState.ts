@@ -2,13 +2,12 @@
 /**
  * Note: empty string is the backspace
  */
-
 enum FlowState {
-    FOCUSED,
-    FLOW,
-    HESITATING,
-    THRASHING,
-    FATIGUED,
+    FOCUSED = "FOCUSED",
+    FLOW = "FLOW",
+    HESITATING = "HESITATING",
+    THRASHING = "THRASHING",
+    FATIGUED = "FATIGUED",
 }
 
 export default FlowState;

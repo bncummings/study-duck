@@ -52,9 +52,6 @@ class KeystrokeBuffer {
             // Update state every {MAX_WINDOW_SIZE} keystrokes
             this.updateState();
         }
-
-
-
     }
 
     updateState(): void {

@@ -33,8 +33,11 @@ export function activate(context: vscode.ExtensionContext) {
 			};
 			
 			keystrokeEvents.push(keystroke);
-			console.log(keystroke);
-			prevTime = cur_time;  // Update after each change, not just at end
+
+			const state = keystrokeEvents.getState();
+			//console.log('Keystroke added:', keystroke);
+			console.log(`[${state.state.toString()}] scores:`, state.scores);
+			prevTime = cur_time;
 		}
     });
 
