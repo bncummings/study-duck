@@ -438,20 +438,8 @@ class FlowViewProvider implements vscode.WebviewViewProvider {
       // Handle any messages from webview if needed
     });
 
-    const flowUri = webviewView.webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'media', 'fan_flow.png')
-    );
-		const focusedUri = webviewView.webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'media', 'fan_focused.png')
-    );
-		const hesitatingUri = webviewView.webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'media', 'fan_hesitating.png')
-    );
-		const frustratedUri = webviewView.webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'media', 'fan_frustrated.png')
-    );
-		const fatiguedUri = webviewView.webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'media', 'fan_fatigued.png')
+    const meterUri = webviewView.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'media', 'meter.svg')
     );
 
     webviewView.webview.html = `<!DOCTYPE html>
@@ -460,48 +448,98 @@ class FlowViewProvider implements vscode.WebviewViewProvider {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
+    html, body {
+      height: 200px;
+      max-height: 300px;
+      overflow: hidden;
+    }
     body {
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      height: 100%;
       margin: 0;
-      padding: 20px;
+      padding: 10px;
       background: #ffffff;
       font-family: sans-serif;
+      box-sizing: border-box;
+    }
+    .meter-container {
+      position: relative;
+      width: 180px;
+      height: 100px;
     }
     img {
-      max-width: 100%;
-      width: 150px;
+      width: 180px;
       height: auto;
-      margin-bottom: 10px;
+      display: block;
+    }
+    .pointer {
+      position: absolute;
+      bottom: 15px;
+      left: 50%;
+      width: 4px;
+      height: 70px;
+      margin-left: -2px;
+      background: #000;
+      border-radius: 2px;
+      transform-origin: bottom center;
+      transform: rotate(-90deg);
+      transition: transform 0.5s ease-out;
+    }
+    .pointer::after {
+      content: '';
+      position: absolute;
+      bottom: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 12px;
+      height: 12px;
+      background: #333;
+      border-radius: 50%;
     }
     #stateLabel {
-      font-size: 16px;
+      font-size: 14px;
       font-weight: bold;
       text-align: center;
       color: #333;
+      margin-top: 4px;
     }
   </style>
 </head>
 <body>
-  <img src="${focusedUri}" alt="Flow" id="fan" />
+  <div class="meter-container">
+    <img src="${meterUri}" alt="Meter" id="meter" />
+    <div class="pointer" id="pointer"></div>
+  </div>
   <div id="stateLabel">Focused</div>
 
   <script>
-    const states = ['Focused', 'Flow', 'Hesitating', 'Thrashing', 'Fatigued'];
-    const images = ['${focusedUri}', '${flowUri}', '${hesitatingUri}', '${frustratedUri}', '${fatiguedUri}'];
-    const imageElement = document.getElementById('fan');
+    // States: Focused, Flow, Hesitating, Thrashing, Fatigued
+    // Angles: -90° (left) to +90° (right) across the semi-circle
+    // 5 segments: each is 36° wide, centered at -72°, -36°, 0°, 36°, 72°
+    const stateAngles = {
+      'Focused': 70,
+      'Flow': 45,
+      'Hesitating': 90,
+      'Thrashing': 160,
+      'Fatigued': 120
+    };
+    
     const stateLabel = document.getElementById('stateLabel');
+    const pointer = document.getElementById('pointer');
+    
+    function setPointer(stateName) {
+      const angle = stateAngles[stateName] || 0;
+      pointer.style.transform = 'rotate(' + (angle - 90) + 'deg)';
+    }
     
     // Listen for external state changes
     window.addEventListener('message', event => {
       const msg = event.data;
       if (msg.command === 'setState') {
-        currentIndex = msg.index;
         stateLabel.textContent = msg.label;
-        imageElement.src = images[currentIndex];
+        setPointer(msg.label);
       }
     });
   </script>
