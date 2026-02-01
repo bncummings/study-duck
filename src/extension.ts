@@ -466,21 +466,21 @@ class FlowViewProvider implements vscode.WebviewViewProvider {
     }
     .meter-container {
       position: relative;
-      width: 180px;
-      height: 100px;
+      width: 240px;
+      height: 133px;
     }
     img {
-      width: 180px;
+      width: 240px;
       height: auto;
       display: block;
     }
     .pointer {
       position: absolute;
-      bottom: 15px;
+      bottom: 20px;
       left: 50%;
-      width: 4px;
-      height: 70px;
-      margin-left: -2px;
+      width: 5px;
+      height: 93px;
+      margin-left: -2.5px;
       background: #000;
       border-radius: 2px;
       transform-origin: bottom center;
@@ -489,11 +489,11 @@ class FlowViewProvider implements vscode.WebviewViewProvider {
     .pointer::after {
       content: '';
       position: absolute;
-      bottom: -6px;
+      bottom: -8px;
       left: 50%;
       transform: translateX(-50%);
-      width: 12px;
-      height: 12px;
+      width: 16px;
+      height: 16px;
       background: #333;
       border-radius: 50%;
     }
