@@ -4,13 +4,20 @@ import KeystrokeEventBuffer from './KeystrokeBuffer';
 import { NextStateResult } from './StateMachine';
 import { createInitialState } from './StateMachine';
 import FlowState from './FlowState';
+import { RECORD_INTERVAL } from './Constants';
+import { keystrokesToCMUTrialRow } from './server/KeyStrokeRecordAdapter';
 
 let prevTime: number | null = null;
+let inactivityTimer: NodeJS.Timeout | undefined;
 
 // Store all keystroke events
 let current_state: NextStateResult = createInitialState(); //Default
 const samples : KeystrokeEvent[][] = [];
 const keystrokeEvents = new KeystrokeEventBuffer(samples, current_state);
+
+// Keystroke record tracking
+let sessionIndex = 0;
+let repCount = 0;
 
 // Output channel for logging in Extension Host
 let outputChannel: vscode.OutputChannel;
@@ -86,6 +93,15 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const event_listener_disposable = vscode.workspace.onDidChangeTextDocument(event => {
 		const cur_time = Date.now();
+		
+		// Reset inactivity timer on each keystroke
+		if (inactivityTimer) {
+			clearTimeout(inactivityTimer);
+		}
+		inactivityTimer = setTimeout(() => {
+			flowProvider.setFlowState('Idle');
+		}, 5000);
+		
 		for (const change of event.contentChanges) {
 			const keystroke: KeystrokeEvent = {
 				timestamp: cur_time,
@@ -105,8 +121,8 @@ export function activate(context: vscode.ExtensionContext) {
 				flowProvider.setFlowState('Flow');
 			} else if (state.state === FlowState.FOCUSED) {
 				flowProvider.setFlowState('Focused');
-			} else if (state.state === FlowState.HESITATING) {
-				flowProvider.setFlowState('Hesitating');
+			} else if (state.state === FlowState.IDLE) {
+				flowProvider.setFlowState('Idle');
 			} else if (state.state === FlowState.THRASHING) {
 				flowProvider.setFlowState('Thrashing');
 			} else if (state.state === FlowState.FATIGUED) {
@@ -136,12 +152,36 @@ export function activate(context: vscode.ExtensionContext) {
     provider.sendMessage({ command: 'talk' });
   });
 
+	// Periodic keystroke record logging
+	const recordInterval = setInterval(() => {
+		const allSamples = keystrokeEvents.getAllSamples();
+		if (allSamples.length === 0) {
+			return;
+		}
+
+		// Get the most recent sample
+		const latestSample = allSamples[allSamples.length - 1];
+		if (latestSample.length < 11) {
+			console.log(`[KeyStrokeRecord] Not enough keystrokes yet (${latestSample.length}/11 needed)`);
+			return;
+		}
+
+		try {
+			const record = keystrokesToCMUTrialRow(latestSample, 1, sessionIndex, repCount);
+			console.log('[KeyStrokeRecord] Created record:', JSON.stringify(record, null, 2));
+			repCount++;
+		} catch (err) {
+			console.log(`[KeyStrokeRecord] Could not create record: ${err instanceof Error ? err.message : err}`);
+		}
+	}, RECORD_INTERVAL * 1000);
+
 	context.subscriptions.push(
 		hello_world_disposable, 
 		event_listener_disposable,
     pirate_disposable,
     confused_disposable,
     talk_disposable,
+		{ dispose: () => clearInterval(recordInterval) }
 	);
 }
 
@@ -406,8 +446,8 @@ private _getHtml(webview: vscode.Webview) {
 class FlowViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'flowView';
   private _view?: vscode.WebviewView;
-  private _currentStateIndex = 0;
-  private readonly _states = ['Focused', 'Flow', 'Hesitating', 'Thrashing', 'Fatigued'];
+  private _currentStateIndex = 2;
+  private readonly _states = ['Focused', 'Flow', 'Idle', 'Thrashing', 'Fatigued'];
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
 
@@ -511,16 +551,16 @@ class FlowViewProvider implements vscode.WebviewViewProvider {
     <img src="${meterUri}" alt="Meter" id="meter" />
     <div class="pointer" id="pointer"></div>
   </div>
-  <div id="stateLabel">Focused</div>
+  <div id="stateLabel">Idle</div>
 
   <script>
-    // States: Focused, Flow, Hesitating, Thrashing, Fatigued
+    // States: Focused, Flow, Idle, Thrashing, Fatigued
     // Angles: -90° (left) to +90° (right) across the semi-circle
     // 5 segments: each is 36° wide, centered at -72°, -36°, 0°, 36°, 72°
     const stateAngles = {
       'Focused': 62,
       'Flow': 38,
-      'Hesitating': 90,
+      'Idle': 90,
       'Thrashing': 152,
       'Fatigued': 120
     };
@@ -531,14 +571,16 @@ class FlowViewProvider implements vscode.WebviewViewProvider {
     let targetAngle = 0;
     let currentAngle = 0;
     let isTransitioning = false;
+    let currentState = 'Idle';
     
     function setPointer(stateName) {
       const angle = stateAngles[stateName] || 0;
       targetAngle = angle - 90;
+      currentState = stateName;
       isTransitioning = true;
     }
     
-    // Animation loop: smooth transition + oscillation
+    // Animation loop: smooth transition + oscillation (disabled when Idle)
     function animate() {
       if (isTransitioning) {
         // Smooth transition towards target
@@ -550,8 +592,8 @@ class FlowViewProvider implements vscode.WebviewViewProvider {
           currentAngle += diff * 0.08;
         }
         pointer.style.transform = 'rotate(' + currentAngle + 'deg)';
-      } else {
-        // Oscillate around target angle
+      } else if (currentState !== 'Idle') {
+        // Oscillate around target angle (disabled when Idle)
         const oscillation = Math.sin(Date.now() * 0.03) * 1.5;
         pointer.style.transform = 'rotate(' + (targetAngle + oscillation) + 'deg)';
       }
