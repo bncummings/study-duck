@@ -87,10 +87,44 @@ export type NextStateResult = {
 };
 
 /**
+ * Create an initial state result with FOCUSED state and zeroed scores/features.
+ */
+export function createInitialState(): NextStateResult {
+    return {
+        state: FlowState.FOCUSED,
+        scores: {
+            [FlowState.FLOW]: 0,
+            [FlowState.THRASHING]: 0,
+            [FlowState.HESITATING]: 0,
+            [FlowState.FATIGUED]: 0,
+            [FlowState.FOCUSED]: 1,
+        },
+        features: {
+            durationMs: 0,
+            events: 0,
+            ins: 0,
+            del: 0,
+            net: 0,
+            deleteRatio: 0,
+            churn: 1,
+            burstFraction: 0,
+            burstsPerMin: 0,
+            pauseFraction: 0,
+            breaks: 0,
+            breaksPerMin: 0,
+            medianBreakMs: 0,
+            pauseTrendSlope: 0,
+            struggleShare: 0,
+        },
+    };
+}
+
+/**
  * Determine the next state based on keystroke events.
+ * Pure function: takes current state result and events, returns new state result.
  * Uses hysteresis to prevent rapid state flickering.
  */
-export function next_state(currentState: FlowState, events: KeystrokeEvent[]): NextStateResult {
+export function next_state(current: NextStateResult, events: KeystrokeEvent[]): NextStateResult {
     const features = computeFeatures(events);
 
     // Calculate scores for each state
@@ -109,11 +143,11 @@ export function next_state(currentState: FlowState, events: KeystrokeEvent[]): N
     };
 
     // If currently in a non-focused state, stay unless below exit threshold
-    if (currentState !== FlowState.FOCUSED) {
-        const currentScore = scores[currentState];
-        const exitThreshold = EXIT_THRESHOLD[currentState as keyof typeof EXIT_THRESHOLD];
+    if (current.state !== FlowState.FOCUSED) {
+        const currentScore = scores[current.state];
+        const exitThreshold = EXIT_THRESHOLD[current.state as keyof typeof EXIT_THRESHOLD];
         if (exitThreshold !== undefined && currentScore >= exitThreshold) {
-            return { state: currentState, scores, features };
+            return { state: current.state, scores, features };
         }
     }
 

@@ -5,7 +5,6 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import KeystrokeBuffer from '../KeystrokeBuffer';
 import KeystrokeEvent from '../KeystrokeEvent';
-// import * as myExtension from '../../extension';
 
 function createKeystroke(timestamp: number, text: string): KeystrokeEvent {
 	return {
