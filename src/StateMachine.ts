@@ -1,6 +1,7 @@
 import FlowState from "./FlowState";
 import KeystrokeEvent from "./KeystrokeEvent";
 import { computeFeatures, Features } from "./Features";
+import { NORMAL_RATE, FAST_RATE, SMASH_RATE, SLOW_RATE } from "./Constants";
 
 // Clamp value between 0 and 1
 const clamp01 = (x: number): number => Math.max(0, Math.min(1, x));
@@ -8,59 +9,70 @@ const clamp01 = (x: number): number => Math.max(0, Math.min(1, x));
 // Score calculators (each returns 0-1, higher = more likely in that state)
 
 /**
- * FLOW: Fast bursts, few pauses, low churn
+ * FLOW: Fast, smooth typing with few pauses and low churn
+ * Triggered by increased speed with productive output
  */
 function scoreFlow(f: Features): number {
-    const burst = clamp01((f.burstFraction - 0.35) / (0.70 - 0.35)); // 0.35→0, 0.70→1
-    const pause = clamp01(1 - (f.pauseFraction / 0.20));             // pause 0.20→0
-    const churnScore = clamp01(1 - (f.churn / 2.5));                 // churn 2.5→0
-    return clamp01(0.45 * burst + 0.35 * pause + 0.20 * churnScore);
+    const eventsPerMin = f.events / Math.max(0.1, f.durationMs / 60000);
+    const speedScore = clamp01((eventsPerMin - NORMAL_RATE) / (FAST_RATE - NORMAL_RATE));
+    const burstScore = clamp01((f.burstFraction - 0.4) / 0.4);   // 40%→0, 80%→1
+    const lowPause = clamp01(1 - f.pauseFraction / 0.15);        // penalize pauses
+    const lowChurn = clamp01(1 - f.churn / 2.0);                 // penalize rewrites
+    return clamp01(0.60 * speedScore + 0.30 * burstScore + 0.20 * lowPause + 0.15 * lowChurn);
 }
 
 /**
- * THRASHING: High churn, high delete ratio — lots of rewriting
+ * THRASHING: Keyboard smashing — inhuman typing speed
+ * Only triggers when typing faster than humanly possible (~10+ keys/sec)
+ * This means literal keyboard mashing, not just fast typing
  */
 function scoreThrashing(f: Features): number {
-    const churnScore = clamp01(f.churn / 3.0);
-    const delScore = clamp01(f.deleteRatio / 0.35);
-    const pauseScore = clamp01(f.pauseFraction / 0.30);
-    return clamp01(0.50 * churnScore + 0.40 * delScore + 0.10 * pauseScore);
+    const eventsPerMin = f.events / Math.max(0.1, f.durationMs / 60000);
+    // Must exceed SMASH_RATE (600 epm = 10 keys/sec) to score at all
+    // Ramps from 0 at SMASH_RATE to 1 at 2x SMASH_RATE
+    if (eventsPerMin < SMASH_RATE) {
+        return 0;
+    }
+    return clamp01((eventsPerMin - SMASH_RATE) / SMASH_RATE);
 }
 
 /**
- * HESITATING: Frequent breaks, stop-start pattern
+ * HESITATING: Frequent pauses, stop-start pattern
+ * Not about speed, but about interruption pattern
  */
 function scoreHesitating(f: Features): number {
-    const breaksScore = clamp01(f.breaksPerMin / 3.0);      // 3 breaks/min → strong
-    const medianScore = clamp01(f.medianBreakMs / 12000);   // 12s median → strong
-    const pauseScore = clamp01(f.pauseFraction / 0.30);
-    return clamp01(0.45 * breaksScore + 0.35 * medianScore + 0.20 * pauseScore);
+    const breaksScore = clamp01(f.breaksPerMin / 2.0);           // 2 breaks/min → strong
+    const medianScore = clamp01(f.medianBreakMs / 8000);         // 8s median → strong
+    const pauseScore = clamp01(f.pauseFraction / 0.20);          // 20% pause time → strong
+    return clamp01(0.40 * breaksScore + 0.35 * medianScore + 0.25 * pauseScore);
 }
 
 /**
- * FATIGUED: Long session + declining performance over time
+ * FATIGUED: Typing rate has slowed significantly
+ * Low event rate, sluggish rhythm, increased pauses
  */
 function scoreFatigued(f: Features): number {
-    const minutes = f.durationMs / 60000;
-    const longSession = clamp01((minutes - 60) / 60);           // ramps 60→120 min
-    const trendScore = clamp01(f.pauseTrendSlope / 0.003);      // positive slope = slowing
-    const struggleScore = clamp01(f.struggleShare / 0.35);      // 35% struggling → strong
-    return clamp01(0.45 * longSession + 0.35 * trendScore + 0.20 * struggleScore);
+    const eventsPerMin = f.events / Math.max(0.1, f.durationMs / 60000);
+    const slowScore = clamp01((NORMAL_RATE - eventsPerMin) / (NORMAL_RATE - SLOW_RATE));
+    const lowBurst = clamp01(1 - f.burstFraction / 0.5);         // burstFraction < 50% → tired
+    const pauseUp = clamp01(f.pauseFraction / 0.25);             // 25% pause → fatigued
+    const struggleScore = clamp01(f.churn / 3.0);                // high churn from mistakes
+    return clamp01(0.40 * slowScore + 0.25 * lowBurst + 0.20 * pauseUp + 0.15 * struggleScore);
 }
 
 // Hysteresis thresholds (enter is higher than exit to prevent flickering)
 const ENTER_THRESHOLD = {
-    [FlowState.FLOW]: 0.70,
-    [FlowState.THRASHING]: 0.70,
-    [FlowState.HESITATING]: 0.65,
-    [FlowState.FATIGUED]: 0.75,
+    [FlowState.FLOW]: 0.55,
+    [FlowState.THRASHING]: 0.50,
+    [FlowState.HESITATING]: 0.45,
+    [FlowState.FATIGUED]: 0.45,
 };
 
 const EXIT_THRESHOLD = {
-    [FlowState.FLOW]: 0.50,
-    [FlowState.THRASHING]: 0.50,
-    [FlowState.HESITATING]: 0.45,
-    [FlowState.FATIGUED]: 0.55,
+    [FlowState.FLOW]: 0.35,
+    [FlowState.THRASHING]: 0.35,
+    [FlowState.HESITATING]: 0.30,
+    [FlowState.FATIGUED]: 0.30,
 };
 
 // Priority order: rarer/higher-impact states first
@@ -115,7 +127,7 @@ export function createInitialState(): NextStateResult {
             medianBreakMs: 0,
             pauseTrendSlope: 0,
             struggleShare: 0,
-        },
+        } as Features,
     };
 }
 
@@ -141,6 +153,11 @@ export function next_state(current: NextStateResult, events: KeystrokeEvent[]): 
         [FlowState.FATIGUED]: fatigued,
         [FlowState.FOCUSED]: focused,
     };
+
+    // THRASHING at max score immediately overrides any state
+    if (thrashing >= 1) {
+        return { state: FlowState.THRASHING, scores, features };
+    }
 
     // If currently in a non-focused state, stay unless below exit threshold
     if (current.state !== FlowState.FOCUSED) {

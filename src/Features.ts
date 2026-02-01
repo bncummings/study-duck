@@ -16,6 +16,7 @@ interface Features {
   // Typing rhythm (flow detection)
   burstFraction: number;       // Fraction of events with dt <= 200ms (fast typing)
   burstsPerMin: number;        // Burst events per minute
+  smashFraction: number;       // Fraction of events with dt < 100ms (keyboard smashing)
 
   // Pause analysis (hesitation detection)
   pauseFraction: number;       // Fraction of time spent in medium pauses (2-5s)
@@ -238,6 +239,9 @@ export function computeFeatures(events: KeystrokeEvent[]): Features {
 
   const burstEvents = events.filter(e => e.delta_time > 0 && e.delta_time <= 200).length;
 
+  // Count ultra-rapid keystrokes (dt < 100ms) for smash detection
+  const smashEvents = events.filter(e => e.delta_time > 0 && e.delta_time < 100).length;
+
   return {
     durationMs: duration,
     events: events.length,
@@ -252,6 +256,7 @@ export function computeFeatures(events: KeystrokeEvent[]): Features {
     // Rhythm
     burstFraction: events.length > 0 ? burstEvents / events.length : 0,
     burstsPerMin: minutes > 0 ? burstEvents / minutes : 0,
+    smashFraction: events.length > 0 ? smashEvents / events.length : 0,
 
     // Pauses & breaks
     pauseFraction: pauseFraction(events),
