@@ -155,7 +155,7 @@ export function activate(context: vscode.ExtensionContext) {
               fatiguedReminderTimeout = setTimeout(() => {
                 provider.sendMessage({
                   command: 'helpfulMessage',
-                  message: '😴 You seem tired. Consider taking a short break or stretching.'
+                  message: '😴 You seem tired. Consider taking a break.'
                 });
                 provider.sendMessage({ command: 'talk' });
                 fatiguedReminderTimeout = null;
